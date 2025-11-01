@@ -8,6 +8,7 @@ from http import HTTPStatus
 
 from vllm.engine.protocol import EngineClient
 from vllm.entrypoints.openai.protocol import (
+    DescribeLoRAAdapterResponse,
     ErrorInfo,
     ErrorResponse,
     LoadLoRAAdapterRequest,
@@ -104,6 +105,19 @@ class OpenAIServingModels:
             return lora_request.lora_name
         return self.base_model_paths[0].name
 
+    async def show_available_lora_models(self) -> ModelList:
+        return [
+            ModelCard(
+                id=lora.lora_name,
+                root=lora.local_path,
+                parent=lora.base_model_name
+                if lora.base_model_name
+                else self.base_model_paths[0].name,
+                permission=[ModelPermission()],
+            )
+            for lora in self.lora_requests.values()
+        ]
+
     async def show_available_models(self) -> ModelList:
         """Show available models. This includes the base model and all
         adapters"""
@@ -116,17 +130,7 @@ class OpenAIServingModels:
             )
             for base_model in self.base_model_paths
         ]
-        lora_cards = [
-            ModelCard(
-                id=lora.lora_name,
-                root=lora.local_path,
-                parent=lora.base_model_name
-                if lora.base_model_name
-                else self.base_model_paths[0].name,
-                permission=[ModelPermission()],
-            )
-            for lora in self.lora_requests.values()
-        ]
+        lora_cards = await self.show_available_lora_models()
         model_cards.extend(lora_cards)
         return ModelList(data=model_cards)
 
@@ -223,6 +227,51 @@ class OpenAIServingModels:
         if request.lora_name not in self.lora_requests:
             return create_error_response(
                 message=f"The lora adapter '{request.lora_name}' cannot be found.",
+                err_type="NotFoundError",
+                status_code=HTTPStatus.NOT_FOUND,
+            )
+
+        return None
+
+    async def list_lora_adapters(self) -> ModelList:
+        lora_models = await self.show_available_lora_models()
+        return ModelList(data=lora_models)
+
+    async def describe_lora_adapter(
+        self, lora_name: str
+    ) -> ErrorResponse | DescribeLoRAAdapterResponse:
+        # Ensure atomicity based on the lora name
+        async with self.lora_resolver_lock[lora_name]:
+            error_check_ret = await self._check_describe_lora_adapter_request(lora_name)
+            if error_check_ret is not None:
+                return error_check_ret
+
+            lora_request = self.lora_requests[lora_name]
+            return DescribeLoRAAdapterResponse(
+                lora_name=lora_request.lora_name,
+                lora_int_id=lora_request.lora_int_id,
+                lora_path=lora_request.lora_path,
+                lora_local_path=lora_request.lora_local_path,
+                long_lora_max_len=lora_request.long_lora_max_len,
+                base_model_name=lora_request.base_model_name,
+                tensorizer_config_dict=lora_request.tensorizer_config_dict,
+            )
+
+    async def _check_describe_lora_adapter_request(
+        self, lora_name: str
+    ) -> ErrorResponse | None:
+        # Check if 'lora_name' is not provided return an error
+        if not lora_name:
+            return create_error_response(
+                message="'lora_name' needs to be provided to describe a LoRA adapter.",
+                err_type="InvalidUserInput",
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        # Check if the lora adapter with the given name exists
+        if lora_name not in self.lora_requests:
+            return create_error_response(
+                message=f"The lora adapter '{lora_name}' cannot be found.",
                 err_type="NotFoundError",
                 status_code=HTTPStatus.NOT_FOUND,
             )
