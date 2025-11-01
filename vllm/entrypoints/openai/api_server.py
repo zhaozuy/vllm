@@ -1333,6 +1333,25 @@ if envs.VLLM_ALLOW_RUNTIME_LORA_UPDATING:
 
         return Response(status_code=200, content=response)
 
+    @router.get(
+        "/v1/describe_lora_adapter/", dependencies=[Depends(validate_json_request)]
+    )
+    async def describe_lora_adapter(raw_request: Request, lora_name: str = ""):
+        handler = models(raw_request)
+        response = await handler.describe_lora_adapter(lora_name)
+        return JSONResponse(
+            content=response.model_dump(),
+            status_code=response.error.code
+            if isinstance(response, ErrorResponse)
+            else 200,
+        )
+
+    @router.get("/v1/list_lora_adapters", dependencies=[Depends(validate_json_request)])
+    async def list_lora_adapters(raw_request: Request):
+        handler = models(raw_request)
+        response = await handler.show_available_lora_models()
+        return JSONResponse(content=response.model_dump())
+
 
 def load_log_config(log_config_file: str | None) -> dict | None:
     if not log_config_file:

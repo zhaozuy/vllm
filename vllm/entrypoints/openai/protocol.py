@@ -2617,6 +2617,16 @@ class TokenizerInfoResponse(OpenAIBaseModel):
     tokenizer_class: str
 
 
+class DescribeLoRAAdapterResponse(BaseModel):
+    lora_name: str
+    lora_int_id: int
+    lora_path: str = ""
+    lora_local_path: str | None = None
+    long_lora_max_len: int | None = None
+    base_model_name: str | None = None
+    tensorizer_config_dict: dict | None = None
+
+
 class LoadLoRAAdapterRequest(BaseModel):
     lora_name: str
     lora_path: str
