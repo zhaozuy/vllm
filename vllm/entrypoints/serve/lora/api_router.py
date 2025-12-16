@@ -31,8 +31,8 @@ def attach_router(app: FastAPI):
 
     @sagemaker_standards.register_load_adapter_handler(
         request_shape={
-            "lora_name": "body.name",
-            "lora_path": "body.src",
+            "lora_name": "query_params.name",
+            "lora_path": "query_params.src",
         },
     )
     @router.post("/v1/load_lora_adapter", dependencies=[Depends(validate_json_request)])
